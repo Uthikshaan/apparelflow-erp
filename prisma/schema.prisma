@@ -1,15 +1,107 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
-  provider = "prisma-client"
-  output   = "../app/generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+enum Role {
+  cutting_supervisor
+  cutting_verifier
+  sewing_supervisor
+}
+
+enum OrderStatus {
+  IN_PROGRESS
+  PENDING_VERIFICATION
+  REJECTED
+  VERIFIED
+  SEWING_STARTED
+}
+
+enum ItemStatus {
+  GREEN
+  YELLOW
+  RED
+}
+
+enum Decision {
+  APPROVED
+  REJECTED
+}
+
+model User {
+  id            Int      @id @default(autoincrement())
+  email         String   @unique
+  passwordHash  String
+  role          Role
+  fullName      String
+  createdAt     DateTime @default(now())
+  orders        CuttingOrder[]
+  verifications VerificationLog[]
+}
+
+model Recipe {
+  id             Int      @id @default(autoincrement())
+  recipeCode     String   @unique
+  name           String
+  category       String
+  stdFabricYards Float
+  wastageCap     Float
+  components     RecipeComponent[]
+  orders         CuttingOrder[]
+}
+
+model RecipeComponent {
+  id               Int     @id @default(autoincrement())
+  recipeId         Int
+  componentName    String
+  piecesPerGarment Int
+  imageUrl         String?
+  recipe           Recipe  @relation(fields: [recipeId], references: [id])
+  items            VerificationItem[]
+}
+
+model CuttingOrder {
+  id              Int         @id @default(autoincrement())
+  orderNo         String      @unique
+  recipeId        Int
+  targetQty       Int
+  fabricRollId    String
+  actualFabricYds Float
+  status          OrderStatus @default(IN_PROGRESS)
+  createdBy       Int
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  recipe          Recipe      @relation(fields: [recipeId], references: [id])
+  creator         User        @relation(fields: [createdBy], references: [id])
+  items           VerificationItem[]
+  logs            VerificationLog[]
+}
+
+model VerificationItem {
+  id          Int         @id @default(autoincrement())
+  orderId     Int
+  componentId Int
+  expectedQty Int
+  actualQty   Int?
+  status      ItemStatus?
+  order       CuttingOrder    @relation(fields: [orderId], references: [id])
+  component   RecipeComponent @relation(fields: [componentId], references: [id])
+
+  @@unique([orderId, componentId])
+}
+
+model VerificationLog {
+  id            Int      @id @default(autoincrement())
+  orderId       Int
+  verifierId    Int
+  decision      Decision
+  rejectionNote String?
+  wastagePct    Float?
+  timestamp     DateTime @default(now())
+  order         CuttingOrder @relation(fields: [orderId], references: [id])
+  verifier      User         @relation(fields: [verifierId], references: [id])
 }
