@@ -2,7 +2,7 @@
 
 Full-stack implementation of the Cutting Verification checkpoint for ApparelFlow ERP (Webtezza Software Engineering Intern Assessment).
 
-**Live URL:** https://apparelflow-i7llgpcmr-apparelflow.vercel.app/login
+**Live URL:** https://apparelflow-erp-vert.vercel.app/login
 **Repository:** https://github.com/Uthikshaan/apparelflow-erp
 
 ## Demo Credentials
