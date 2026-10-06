@@ -4,7 +4,6 @@
 **Author:** [Your Full Name]
 **Date:** [Date]
 
-> **How to use this file:** Everything marked `[FILL IN]` or `[VERIFY]` can only be answered by you. Replace those parts with what actually happened in your project, and delete this note. Do not keep any claim you cannot point to in your own code or chat history. Evaluators will compare this report with your commits.
 
 ---
 
@@ -43,24 +42,13 @@
 
 **How I resolved it:** I redeployed after the change and confirmed the new deployment timestamp was later than my edit. Login then worked.
 
-### Flaw 3: [FILL IN: a code-level flaw from your own implementation]
+### Flaw 3: AI-written documentation that did not match the real code
 
-> The assessment asks for at least two flaws; the two above come from debugging. A reviewer will also want to see code-level issues. Only include one if you actually met it. Examples of things worth checking in your AI-generated code:
->
-> - **RBAC only in the UI:** a hidden button or client redirect with no role check in the API route.
-> - **Trusting the request body:** reading `verifierId` or a timestamp from the client instead of the JWT/session.
-> - **Weak numeric validation:** `Number(value)` or `parseInt` accepting `"12abc"`, decimals, negatives, or empty strings.
-> - **Approval check using only the UI's traffic lights:** the server must recompute RED/YELLOW/GREEN from the stored counts.
-> - **Sewing queue filter in JavaScript** after fetching all orders, instead of `where: { status: 'VERIFIED' }` in the query.
-> - **Low contrast inputs:** white or light-grey text inside inputs and dropdowns (the assessment's zero-tolerance defect).
-> - **Re-render loops or stale state** in the verifier terminal when counts change.
+**What the AI generated:** The README template and the architecture text proposed by the AI used state names (`CUTTING_IN_PROGRESS`) and a description of the tests ("run against an in-memory fake Prisma client") that did not match my code.
 
-**Template for this entry:**
+**Why it was wrong:** My code uses `IN_PROGRESS` as the first status. My tests do not fake the whole application: they call the real API route handlers and the real session/JWT code, and replace only the Prisma database layer. Documentation that misdescribes the system would mislead an evaluator and hide what the tests really prove.
 
-- **File / function:** `[FILL IN]`
-- **What the AI generated:** `[FILL IN]`
-- **Why it was wrong or unsafe:** `[FILL IN]`
-- **How I found it:** `[FILL IN: manual test, cURL, test failure, code review]`
+**How I found it:** I compared the AI's text with my folder structure, my route files, and `tests/gatekeeper.test.ts`, then rewrote the README to match what the code does.
 
 ---
 
@@ -72,55 +60,50 @@
 - Corrected `DATABASE_URL` so it contains only the connection string (no quotes, spaces, or `DATABASE_URL=` prefix), and redeployed.
 - Generated a fresh `JWT_SECRET` for production rather than reusing the local one.
 - Turned off Vercel Deployment Protection so evaluators can open the production URL without a Vercel login, then verified in an incognito window.
-- Used a stable production domain in the README and submission instead of per-deployment URLs.
+- Used the stable production domain in the README and submission instead of per-deployment URLs.
 
-**Code hardening** `[FILL IN: replace with what you really changed]`
+**Code structure**
 
-- Moved business rules (traffic-light status, wastage %, allowed state transitions) into plain functions so they can be unit tested. `[VERIFY]`
-- Added server-side validation for all inputs (positive integers only, required fields, mandatory rejection note). `[VERIFY]`
-- Recomputed component status on the server before approval instead of trusting client-provided statuses. `[VERIFY]`
-- Fixed input and dropdown contrast: dark text on light backgrounds in default, focus, and open states. `[VERIFY]`
-- `[FILL IN: any other change]`
+- Kept business rules (traffic-light status, wastage %, approval rules) in `lib/verification.ts` and the Sewing Queue query in `lib/sewing.ts`, separate from the route files, so they can be tested directly.
+- Put session and role logic in `lib/auth.ts` so every route uses the same checks.
+- Added a database migration (`add_status_index`) to index order status for the Sewing Queue query.
+- Split order actions into separate routes (`approve`, `reject`, `resubmit`) so each status change has its own guard.
 
-**Testing** `[VERIFY]`
+**Testing**
 
-- Automated tests for: all-GREEN approval, RED shortage blocked, rejection without a note, non-verifier 403, and sewing queue isolation. Run with `npm test`.
-- Manual cURL/Postman checks of 403, 422, and queue isolation against the live URL.
+- 9 automated tests with Vitest (`npm test`): 4 for the traffic-light and wastage rules, and 5 for the gatekeeper rules (Tests 1 to 5 from the assessment).
+- The gatekeeper tests call the real route handlers and the real session/JWT code. Only the Prisma database layer is replaced by an in-memory fake.
 
 ---
 
 ## 4. Defensive Architecture
 
-> Describe only what your code does. The structure below follows the assessment's requirements; edit each row to match your implementation.
-
 ### State machine
 
 ```
-CUTTING_IN_PROGRESS → PENDING_VERIFICATION → VERIFIED → SEWING
-                              ↓
-                          REJECTED → (re-cut) → PENDING_VERIFICATION
+IN_PROGRESS → PENDING_VERIFICATION → VERIFIED → Sewing started
+                       ↓
+                   REJECTED → resubmit → PENDING_VERIFICATION
 ```
 
-- Only defined transitions are allowed. A request to move an order to any other status is rejected by the server. `[VERIFY]`
-- Status changes happen only inside server routes, never from a client-supplied status field. `[VERIFY]`
+Status changes happen only inside server routes (`approve`, `reject`, `resubmit`, and the sewing `start` route). The client never sends a status value.
 
-### API guards
+### API guards (each one is covered by an automated test)
 
 | Guard | Enforcement | HTTP result |
 |-------|-------------|-------------|
-| Authentication | Session/JWT read on the server for every protected route | 401 |
-| Role check | Approve/reject allowed only for `cutting_verifier`; order creation only for `cutting_supervisor`; sewing endpoints only for `sewing_supervisor` | 403 |
-| Hard stop | Server recomputes status for every component; approval is refused if any is RED, missing, or uncounted | 422 |
-| Rejection note | Reject requires a non-empty note | 400 / 422 |
-| Input validation | Positive whole numbers only; empty, negative, decimal, and non-numeric values rejected | 400 / 422 |
-| Query isolation | Sewing queue query uses `status = 'VERIFIED'` at the database level | n/a |
-| Identity | Verifier ID and timestamps come from the session, never from the request body | n/a |
+| Authentication | Session/JWT read on the server | 401 when logged out |
+| Role check | Approve and reject allowed only for the Cutting Verifier; Supervisor and Sewing roles are refused; the Sewing Queue refuses the Verifier | 403 |
+| Hard stop | The server computes GREEN/YELLOW/RED from the submitted counts; approval is refused if any component is RED or uncounted | 422 |
+| Rejection note | Missing, empty, or whitespace-only note is refused | 400 |
+| Query isolation | The Sewing Queue query filters `status = 'VERIFIED'` in the database query; a `?status=` URL parameter is ignored | n/a |
+| Identity | The verifier ID stored in the audit log comes from the session; the request body contains only the counts | n/a |
+| No side effects on failure | A blocked approval leaves the order in `PENDING_VERIFICATION` and writes nothing to the log | n/a |
 
 ### Audit trail
 
-- On approval, the verifier's user ID, timestamp, component variances, and wastage % are written to `verification_logs`. `[VERIFY]`
-- Fabric Wastage % = ((Actual Fabric Used − Expected Fabric) ÷ Expected Fabric) × 100, computed on the server. `[VERIFY]`
-- No route updates or deletes audit rows once written. `[VERIFY]`
+- On approval, the server writes a `verification_logs` record with the verifier ID, the decision, and the fabric wastage %. The component statuses are saved on the verification items.
+- Fabric Wastage % = ((Actual Fabric Used − Expected Fabric) ÷ Expected Fabric) × 100, computed on the server.
 
 ### Why the UI is not the security boundary
 
@@ -130,4 +113,4 @@ Disabled buttons, hidden tabs, and redirects only improve usability. Every rule 
 
 ## Closing Note
 
-AI tools sped up setup and debugging, but they also produced a confident wrong diagnosis (Flaw 1) that I only caught by reading the full error. I treated AI output as a draft: I verified it against logs, tests, and direct API requests before keeping it.
+AI tools sped up setup and debugging, but they also produced a confident wrong diagnosis (Flaw 1) that I only caught by reading the full error, and documentation that did not match my code (Flaw 3). I treated AI output as a draft and checked it against logs, my own code, and automated tests before keeping it.
