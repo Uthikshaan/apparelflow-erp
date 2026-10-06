@@ -2,8 +2,8 @@
 
 Full-stack implementation of the Cutting Verification checkpoint for ApparelFlow ERP (Webtezza Software Engineering Intern Assessment).
 
-**Live URL:** https://YOUR-APP.vercel.app
-**Repository:** https://github.com/YOUR-USERNAME/apparelflow-erp
+**Live URL:** https://apparelflow-i7llgpcmr-apparelflow.vercel.app/login
+**Repository:** https://github.com/Uthikshaan/apparelflow-erp
 
 ## Demo Credentials
 
@@ -23,7 +23,7 @@ Full-stack implementation of the Cutting Verification checkpoint for ApparelFlow
 
 ## Architecture Summary
 
-[2-4 sentences: how the app is structured, e.g. API routes under `app/api`, domain logic in `lib/`, middleware for auth.]
+ApparelFlow is a Next.js (App Router) application written in TypeScript. Each role has its own page under `app/` (`supervisor`, `verifier`, `sewing`), and all data changes go through API routes under `app/api/` (auth, orders, cutting verification, sewing queue). Business rules live in `lib/`: `verification.ts` holds the traffic-light and wastage logic and the approval rules, `sewing.ts` holds the Sewing Queue query, and `auth.ts` handles JWT sessions and role checks, so every route enforces permissions on the server. Data is stored in PostgreSQL (Neon) through Prisma, with migrations and the seed script in `prisma/`. Automated tests with Vitest are in `tests/` and run against an in-memory fake Prisma client.
 
 ### State Machine
 
@@ -67,7 +67,7 @@ Seeded recipes: **REC-BL01 Casual Blouse** and **REC-CT02 Crop Top**.
 ## Local Setup
 
 ```bash
-git clone https://github.com/YOUR-USERNAME/apparelflow-erp.git
+git clone https://github.com/Uthikshaan/apparelflow-erp.git
 cd apparelflow-erp
 npm install
 cp .env.example .env
@@ -76,8 +76,9 @@ cp .env.example .env
 Fill in `.env`:
 
 ```
-DATABASE_URL="postgresql://USER:PASSWORD@HOST/DB?sslmode=require"
-JWT_SECRET="generate with: openssl rand -base64 32"
+DATABASE_URL="postgresql://neondb_owner:npg_evx9Okz6jmFc@ep-bold-field-b4t3hwwv-pooler.c-6.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+
+JWT_SECRET="9a2f2f5ac075b810110440301f201d90edb4424173075f0d16c493945b29718e49e7d3e85232f4329cc5fa14b526bad4"
 ```
 
 Then:
@@ -100,7 +101,26 @@ Covers: all-GREEN approval, RED shortage blocking, rejection without note, non-v
 
 ## Project Structure
 
-[Short tree of the key folders: app/api, lib, prisma, tests.]
+app/
+  api/
+    auth/            login, logout, me
+    orders/          create/list orders; [id]/approve, reject, resubmit
+    cutting/verify/  verifier submits component counts
+    sewing/          queue (VERIFIED only); [id]/start
+  login/ supervisor/ verifier/ sewing/ forbidden/    role pages
+components/          shared UI (LogoutButton)
+lib/
+  api.ts             API helpers
+  auth.ts            JWT session and role checks
+  prisma.ts          Prisma client
+  sewing.ts          Sewing Queue query
+  verification.ts    traffic-light, wastage and approval rules
+prisma/
+  schema.prisma      data model
+  migrations/        init + status index
+  seed.ts            recipes and demo users
+tests/
+  gatekeeper.test.ts, verification.test.ts, fakePrisma.ts
 
 ## AI Usage
 
