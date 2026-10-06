@@ -79,6 +79,7 @@ model CuttingOrder {
   creator         User        @relation(fields: [createdBy], references: [id])
   items           VerificationItem[]
   logs            VerificationLog[]
+    @@index([status])
 }
 
 model VerificationItem {
